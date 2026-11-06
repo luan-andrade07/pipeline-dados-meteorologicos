@@ -1,0 +1,14 @@
+2026-11-05 21:40:30,066 | INFO | ========== INÍCIO DO PIPELINE ==========
+2026-11-05 21:40:30,299 | INFO | Iniciando coleta na API Open-Meteo.
+2026-11-05 21:40:33,707 | INFO | Coleta concluída: 7 registros recebidos.
+2026-11-05 21:40:33,779 | INFO | Validação concluída. Recebidos: 7 | Inválidos: 0 | Duplicados: 0 | Válidos: 7
+2026-11-05 21:40:33,792 | INFO | Iniciando gravação no banco MySQL.
+2026-11-05 21:40:34,058 | INFO | Gravação concluída: 7 registros processados.
+2026-11-05 21:40:34,060 | INFO | PIPELINE FINALIZADO COM SUCESSO.
+2026-11-05 21:50:53,604 | INFO | ========== INÍCIO DO PIPELINE ==========
+2026-11-05 21:50:53,719 | INFO | Iniciando coleta na API Open-Meteo.
+2026-11-05 21:50:58,947 | INFO | Coleta concluída: 7 registros recebidos.
+2026-11-05 21:50:59,301 | INFO | Validação concluída. Recebidos: 7 | Inválidos: 0 | Duplicados: 0 | Válidos: 7
+2026-11-05 21:50:59,372 | INFO | Iniciando gravação no banco MySQL.
+2026-11-05 21:51:00,644 | INFO | Gravação concluída: 7 registros processados.
+2026-11-05 21:51:00,646 | INFO | PIPELINE FINALIZADO COM SUCESSO.
