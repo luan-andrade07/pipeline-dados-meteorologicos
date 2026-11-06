@@ -1,31 +1,84 @@
 
+from typing import Optional
+
+import numpy as np
 import pandas as pd
 
 from src.logging_config import logger
 
 
-def validar_tratar_dados(df):
-    """Valida os dados e remove registros inconsistentes."""
+# Colunas obrigatórias para o funcionamento do pipeline
+COLUNAS_OBRIGATORIAS = [
+    "cidade",
+    "estado",
+    "data_referencia",
+    "temperatura_max_c",
+    "temperatura_min_c",
+    "precipitacao_mm",
+    "umidade_media_pct",
+    "vento_max_kmh",
+    "codigo_clima"
+]
 
-    if df is None or df.empty:
+# Campos que devem conter valores numéricos
+COLUNAS_NUMERICAS = [
+    "temperatura_max_c",
+    "temperatura_min_c",
+    "precipitacao_mm",
+    "umidade_media_pct",
+    "vento_max_kmh",
+    "codigo_clima"
+]
+
+# Intervalos de validação
+TEMPERATURA_MINIMA = -90
+TEMPERATURA_MAXIMA = 60
+
+UMIDADE_MINIMA = 0
+UMIDADE_MAXIMA = 100
+
+# Identificação única de cada previsão
+CHAVE_UNICA = [
+    "cidade",
+    "estado",
+    "data_referencia"
+]
+
+
+def validar_tratar_dados(
+    df: Optional[pd.DataFrame]
+) -> Optional[pd.DataFrame]:
+    """
+    Valida, padroniza e transforma os dados meteorológicos.
+
+    Args:
+        df: DataFrame recebido da etapa de extração.
+
+    Returns:
+        DataFrame com registros válidos ou None quando
+        não houver dados suficientes para processamento.
+    """
+
+    # Verifica se existem dados para processar
+    if df is None or not isinstance(df, pd.DataFrame):
+        logger.warning("Dados recebidos em formato inválido.")
+        return None
+
+    if df.empty:
         logger.warning("Nenhum dado disponível para validação.")
         return None
 
-    colunas_obrigatorias = [
-        "cidade",
-        "estado",
-        "data_referencia",
-        "temperatura_max_c",
-        "temperatura_min_c",
-        "precipitacao_mm",
-        "umidade_media_pct",
-        "vento_max_kmh",
-        "codigo_clima"
-    ]
+    quantidade_recebida = len(df)
 
+    logger.info(
+        "Iniciando validação de %d registros.",
+        quantidade_recebida
+    )
+
+    # Verifica a existência das colunas obrigatórias
     colunas_ausentes = [
         coluna
-        for coluna in colunas_obrigatorias
+        for coluna in COLUNAS_OBRIGATORIAS
         if coluna not in df.columns
     ]
 
@@ -36,42 +89,35 @@ def validar_tratar_dados(df):
         )
         return None
 
+    # Trabalha com uma cópia para não modificar os dados originais
     df = df.copy()
 
-    # Padronização dos textos
-    df["cidade"] = df["cidade"].astype("string").str.strip()
+    # Padronização dos campos textuais
+    for coluna in ["cidade", "estado"]:
+        df[coluna] = (
+            df[coluna]
+            .astype("string")
+            .str.strip()
+        )
 
-    df["estado"] = (
-        df["estado"]
-        .astype("string")
-        .str.strip()
-        .str.upper()
-    )
+    df["estado"] = df["estado"].str.upper()
 
-    # Conversão da data
+    # Conversão e validação das datas
     df["data_referencia"] = pd.to_datetime(
         df["data_referencia"],
         errors="coerce"
     )
 
-    # Conversão dos campos numéricos
-    colunas_numericas = [
-        "temperatura_max_c",
-        "temperatura_min_c",
-        "precipitacao_mm",
-        "umidade_media_pct",
-        "vento_max_kmh",
-        "codigo_clima"
-    ]
-
+    # Identifica valores numéricos inválidos
     conversao_invalida = pd.Series(
         False,
-        index=df.index
+        index=df.index,
+        dtype=bool
     )
 
-    for coluna in colunas_numericas:
+    for coluna in COLUNAS_NUMERICAS:
 
-        original = df[coluna].copy()
+        valor_original = df[coluna].copy()
 
         df[coluna] = pd.to_numeric(
             df[coluna],
@@ -79,10 +125,27 @@ def validar_tratar_dados(df):
         )
 
         conversao_invalida |= (
-            original.notna() & df[coluna].isna()
+            valor_original.notna()
+            & df[coluna].isna()
         )
 
-    # Regras de qualidade dos dados
+    # Identifica valores infinitos
+    valores_nao_finitos = pd.Series(
+        False,
+        index=df.index,
+        dtype=bool
+    )
+
+    for coluna in COLUNAS_NUMERICAS:
+
+        valores_presentes = df[coluna].notna()
+
+        valores_nao_finitos |= (
+            valores_presentes
+            & ~np.isfinite(df[coluna].astype(float))
+        )
+
+    # Define as regras de qualidade
     motivos_invalidade = {
 
         "Data inválida": (
@@ -96,18 +159,28 @@ def validar_tratar_dados(df):
             | df["estado"].eq("").fillna(True)
         ),
 
-        "Valor numérico inválido": (
+        "Conversão numérica inválida": (
             conversao_invalida
+        ),
+
+        "Valor numérico infinito": (
+            valores_nao_finitos
         ),
 
         "Temperatura máxima fora do intervalo": (
             df["temperatura_max_c"].notna()
-            & ~df["temperatura_max_c"].between(-90, 60)
+            & ~df["temperatura_max_c"].between(
+                TEMPERATURA_MINIMA,
+                TEMPERATURA_MAXIMA
+            )
         ),
 
         "Temperatura mínima fora do intervalo": (
             df["temperatura_min_c"].notna()
-            & ~df["temperatura_min_c"].between(-90, 60)
+            & ~df["temperatura_min_c"].between(
+                TEMPERATURA_MINIMA,
+                TEMPERATURA_MAXIMA
+            )
         ),
 
         "Temperatura mínima maior que máxima": (
@@ -126,7 +199,10 @@ def validar_tratar_dados(df):
 
         "Umidade fora do intervalo": (
             df["umidade_media_pct"].notna()
-            & ~df["umidade_media_pct"].between(0, 100)
+            & ~df["umidade_media_pct"].between(
+                UMIDADE_MINIMA,
+                UMIDADE_MAXIMA
+            )
         ),
 
         "Velocidade do vento negativa": (
@@ -143,9 +219,11 @@ def validar_tratar_dados(df):
         )
     }
 
+    # Consolida os registros que apresentam inconsistências
     registros_invalidos = pd.Series(
         False,
-        index=df.index
+        index=df.index,
+        dtype=bool
     )
 
     for motivo, mascara in motivos_invalidade.items():
@@ -153,8 +231,9 @@ def validar_tratar_dados(df):
         quantidade = int(mascara.sum())
 
         if quantidade > 0:
+
             logger.warning(
-                "%s: %d registro(s).",
+                "%s: %d registro(s) encontrado(s).",
                 motivo,
                 quantidade
             )
@@ -168,51 +247,57 @@ def validar_tratar_dados(df):
     # Remove os registros inválidos
     df = df.loc[~registros_invalidos].copy()
 
-    # Remove duplicidades dentro da coleta
-    duplicados = df.duplicated(
-        subset=[
-            "cidade",
-            "estado",
-            "data_referencia"
-        ]
-    ).sum()
+    # Remove duplicidades considerando a chave única
+    quantidade_duplicados = int(
+        df.duplicated(subset=CHAVE_UNICA).sum()
+    )
 
     df = df.drop_duplicates(
-        subset=[
-            "cidade",
-            "estado",
-            "data_referencia"
-        ],
+        subset=CHAVE_UNICA,
         keep="last"
     )
 
-    # Identifica valores ausentes
-    for coluna in colunas_numericas:
+    # Identifica valores ausentes nas medições
+    for coluna in COLUNAS_NUMERICAS:
 
-        ausentes = int(df[coluna].isna().sum())
+        quantidade_ausente = int(
+            df[coluna].isna().sum()
+        )
 
-        if ausentes > 0:
+        if quantidade_ausente > 0:
+
             logger.warning(
-                "%d valor(es) ausente(s) em %s.",
-                ausentes,
+                "%d valor(es) ausente(s) na coluna %s.",
+                quantidade_ausente,
                 coluna
             )
 
+    # Interrompe caso nenhum registro seja válido
     if df.empty:
-        logger.error("Nenhum registro válido após a validação.")
+        logger.error(
+            "Nenhum registro válido após a transformação."
+        )
         return None
 
-    # Formata a data para o banco de dados
+    # Padroniza as datas para armazenamento no MySQL
     df["data_referencia"] = (
-        df["data_referencia"].dt.strftime("%Y-%m-%d")
+        df["data_referencia"]
+        .dt.strftime("%Y-%m-%d")
     )
 
+    # Organiza o índice final
+    df = df.reset_index(drop=True)
+
+    # Registra o resultado da transformação
     logger.info(
-        "Validação concluída. Recebidos: %d | Inválidos: %d | "
-        "Duplicados: %d | Válidos: %d",
-        len(registros_invalidos),
+        "Validação concluída. "
+        "Recebidos: %d | "
+        "Inválidos: %d | "
+        "Duplicados: %d | "
+        "Válidos: %d",
+        quantidade_recebida,
         quantidade_invalida,
-        duplicados,
+        quantidade_duplicados,
         len(df)
     )
 

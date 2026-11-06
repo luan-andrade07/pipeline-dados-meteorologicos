@@ -1,83 +1,111 @@
 # 🌦️ Pipeline de Dados Meteorológicos
 
-Pipeline ETL desenvolvido em Python para coletar previsões meteorológicas da API Open-Meteo, realizar validações e transformações com Pandas e armazenar os dados em um banco de dados MySQL.
+Projeto de Engenharia de Dados desenvolvido em Python para coletar, transformar, validar e armazenar previsões meteorológicas da cidade de São Paulo. Os dados são disponibilizados em um banco de dados MySQL e apresentados em um dashboard interativo desenvolvido com Streamlit.
 
-O projeto demonstra conceitos fundamentais de Engenharia de Dados, incluindo integração com APIs, tratamento de dados, persistência em banco relacional, prevenção de duplicidades e monitoramento de execuções.
+O projeto demonstra conceitos de integração com APIs, processamento e qualidade de dados, persistência em banco relacional e visualização de informações.
 
 ## 🎯 Objetivo
 
-Desenvolver um fluxo automatizado de dados meteorológicos para a cidade de São Paulo, utilizando uma arquitetura ETL (Extract, Transform, Load).
+Construir um pipeline ETL capaz de obter previsões meteorológicas para os próximos sete dias, realizar o tratamento e a validação dos dados e armazená-los em um banco MySQL.
 
-O pipeline coleta previsões para os próximos sete dias, verifica a qualidade das informações e armazena os registros em uma tabela MySQL.
+Além do processamento, o projeto disponibiliza um dashboard para consultar indicadores e acompanhar as condições meteorológicas previstas.
 
 ## 🛠️ Tecnologias utilizadas
 
-- **Python:** linguagem principal do projeto.
-- **Pandas:** organização, transformação e validação dos dados.
-- **Requests:** integração com a API meteorológica.
+- **Python:** linguagem principal.
+- **Pandas:** manipulação e tratamento de dados.
+- **NumPy:** operações numéricas e validações.
+- **Requests:** integração com a API Open-Meteo.
 - **MySQL:** armazenamento dos dados.
 - **SQLAlchemy:** gerenciamento da conexão com o banco.
-- **PyMySQL:** comunicação entre Python e MySQL.
+- **PyMySQL:** comunicação com o MySQL.
 - **Python-dotenv:** gerenciamento de variáveis de ambiente.
+- **Streamlit:** desenvolvimento do dashboard.
+- **Plotly:** criação de gráficos interativos.
 - **Logging:** registro e monitoramento das execuções.
 
-## 🏗️ Arquitetura do projeto
-
-O projeto utiliza uma estrutura modular, separando cada responsabilidade:
+## 🏗️ Estrutura do projeto
 
 ```text
 pipeline-clima/
 │
+├── dashboard/
+│   ├── __init__.py
+│   ├── app.py
+│   ├── components.py
+│   └── style.css
+│
 ├── src/
 │   ├── __init__.py
-│   ├── logging_config.py
 │   ├── extract.py
 │   ├── transform.py
-│   └── load.py
+│   ├── load.py
+│   └── logging_config.py
+│
+├── sql/
+│   └── schema.sql
 │
 ├── logs/
-│   └── pipeline.log
 │
 ├── main.py
 ├── requirements.txt
-├── .env
-└── .gitignore
+├── .env.example
+├── .gitignore
+└── README.md
 ```
 
-### Fluxo ETL
+## 🔄 Pipeline ETL
 
-**1. Extract — Extração**
+O processamento é dividido em três etapas:
 
-Coleta de informações meteorológicas por meio da API Open-Meteo.
+### 1. Extract — Extração
 
-**2. Transform — Transformação**
+- Consumo da API Open-Meteo.
+- Coleta de previsões meteorológicas para São Paulo.
+- Recebimento de informações em formato JSON.
+- Conversão dos dados para um DataFrame do Pandas.
 
-Utilização do Pandas para:
-- Converter e padronizar os dados.
-- Validar datas e valores numéricos.
-- Identificar valores ausentes.
-- Verificar inconsistências meteorológicas.
-- Remover registros inválidos e duplicados.
+### 2. Transform — Transformação
 
-**3. Load — Carregamento**
+- Padronização dos dados.
+- Conversão e validação de datas.
+- Verificação de valores ausentes e inconsistências.
+- Validação de temperaturas, precipitação, umidade e vento.
+- Identificação e remoção de registros inválidos.
+- Remoção de duplicidades.
 
-Armazenamento dos dados no MySQL utilizando SQLAlchemy e PyMySQL.
+### 3. Load — Carregamento
 
-O processo utiliza uma chave única por cidade, estado e data para atualizar registros existentes e evitar duplicações.
+- Conexão com o banco de dados MySQL.
+- Preparação dos registros para inserção.
+- Persistência dos dados.
+- Atualização de registros existentes por meio de uma chave única composta por cidade, estado e data de referência.
+
+## 📊 Dashboard
+
+O projeto conta com um dashboard interativo desenvolvido em Streamlit, com identidade visual escura e componentes organizados para facilitar a análise dos dados.
+
+Principais funcionalidades:
+
+- Filtros por cidade e período.
+- Indicadores meteorológicos.
+- Destaque da previsão mais próxima.
+- Visualização das temperaturas máximas e mínimas.
+- Gráficos de precipitação, umidade e velocidade do vento.
+- Tabela com os registros meteorológicos e descrição das condições climáticas.
 
 ## 🌐 Fonte dos dados
 
-[Open-Meteo — Weather API](https://open-meteo.com/)
+**API utilizada:** [Open-Meteo — Weather API](https://open-meteo.com/)
 
-A API fornece informações meteorológicas em formato JSON.
+Localidade de referência:
 
-Localidade utilizada:
 - Cidade: São Paulo
 - Estado: SP
 - Latitude: -23.5505
 - Longitude: -46.6333
 
-## 📊 Dados coletados
+## 📋 Dados armazenados
 
 | Campo | Descrição |
 |---|---|
@@ -97,22 +125,21 @@ Localidade utilizada:
 
 - Python instalado.
 - MySQL Server instalado e em execução.
-- Git instalado (para clonar o repositório).
 
-### 2. Clonar o repositório
+### 2. Obter o projeto
 
 ```bash
-git clone URL_DO_REPOSITORIO
-cd pipeline-clima
+git clone https://github.com/luan-andrade07/pipeline-dados-meteorologicos.git
+cd pipeline-dados-meteorologicos
 ```
 
-### 3. Criar o ambiente virtual
+### 3. Criar e ativar o ambiente virtual
 
 ```bash
 python -m venv .venv
 ```
 
-Ativar no Windows PowerShell:
+No Windows PowerShell:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -126,41 +153,17 @@ pip install -r requirements.txt
 
 ### 5. Configurar o banco de dados
 
-Criar o banco:
+Crie o banco de dados MySQL:
 
 ```sql
 CREATE DATABASE projeto_dados;
-
-USE projeto_dados;
 ```
 
-Criar a tabela:
-
-```sql
-CREATE TABLE clima_diario (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    cidade VARCHAR(100) NOT NULL,
-    estado CHAR(2) NOT NULL,
-    data_referencia DATE NOT NULL,
-    temperatura_max_c DECIMAL(5,2),
-    temperatura_min_c DECIMAL(5,2),
-    precipitacao_mm DECIMAL(7,2),
-    umidade_media_pct DECIMAL(5,2),
-    vento_max_kmh DECIMAL(7,2),
-    codigo_clima INT,
-    data_coleta TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE KEY uq_cidade_data (
-        cidade,
-        estado,
-        data_referencia
-    )
-);
-```
+Execute o script `sql/schema.sql` para criar a estrutura da tabela.
 
 ### 6. Configurar as variáveis de ambiente
 
-Criar um arquivo `.env` na raiz do projeto:
+Crie uma cópia do arquivo `.env.example` com o nome `.env` e configure os dados da sua conexão MySQL:
 
 ```env
 MYSQL_HOST=127.0.0.1
@@ -170,52 +173,59 @@ MYSQL_USER=root
 MYSQL_PASSWORD=SUA_SENHA
 ```
 
-Substitua `SUA_SENHA` pela senha configurada no MySQL.
+Substitua `SUA_SENHA` pela senha configurada no seu MySQL.
 
-**Importante:** nunca compartilhe ou publique o arquivo `.env`.
+**Importante:** o arquivo `.env` contém informações sensíveis e não deve ser enviado ao GitHub.
 
 ### 7. Executar o pipeline
+
+Na raiz do projeto:
 
 ```bash
 python main.py
 ```
 
-Após a execução, os dados serão coletados, validados e armazenados no banco de dados.
+### 8. Executar o dashboard
+
+Na raiz do projeto:
+
+```bash
+python -m streamlit run dashboard/app.py
+```
+
+O Streamlit disponibilizará o dashboard no navegador.
 
 ## 📝 Monitoramento
 
 O projeto utiliza o módulo Logging do Python para registrar:
 
-- Início e conclusão da execução.
+- Início e conclusão das execuções.
 - Quantidade de registros coletados.
-- Resultados da validação.
-- Erros durante a comunicação com a API.
-- Falhas de conexão ou gravação no MySQL.
+- Resultados das validações.
+- Erros na comunicação com a API.
+- Falhas de conexão e gravação no banco.
 
 Os registros são armazenados em `logs/pipeline.log`, com rotação automática dos arquivos.
 
-## ✅ Resultados alcançados
+## ✅ Resultados e funcionalidades implementadas
 
-Durante os testes realizados:
+- Pipeline ETL modularizado em Python.
+- Integração com API externa.
+- Tratamento e validação de dados com Pandas e NumPy.
+- Armazenamento em banco de dados relacional.
+- Prevenção de duplicidades e atualização de registros.
+- Registro de eventos e erros com Logging.
+- Dashboard interativo com Streamlit e Plotly.
+- Indicadores e gráficos para análise meteorológica.
 
-- Extração de sete previsões meteorológicas.
-- Validação dos registros com Pandas.
-- Identificação de dados inválidos e duplicados.
-- Integração entre Python e MySQL.
-- Armazenamento e atualização dos registros.
-- Teste de execução repetida sem duplicação.
-- Organização do código em módulos independentes.
-- Implementação de logs para acompanhamento das execuções.
+## 🚀 Possíveis evoluções
 
-## 🚀 Melhorias futuras
-
-- Automatização periódica da execução do pipeline.
 - Inclusão de novas cidades brasileiras.
-- Ampliação das análises meteorológicas.
-- Implementação de testes automatizados.
-- Desenvolvimento de dashboards para visualização dos dados.
-- Monitoramento de falhas e qualidade dos dados.
+- Automatização periódica da coleta.
+- Ampliação dos indicadores meteorológicos.
+- Disponibilização do dashboard em ambiente online.
+- Monitoramento automatizado da qualidade dos dados.
 
 ---
 
-**Projeto pessoal desenvolvido para fins de aprendizado e demonstração de conhecimentos em Python, SQL, Pandas e Engenharia de Dados.**
+**Projeto pessoal desenvolvido para fins de aprendizado e demonstração de conhecimentos em Python, SQL, tratamento de dados e Engenharia de Dados.**

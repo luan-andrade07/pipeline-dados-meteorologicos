@@ -1,5 +1,8 @@
 requests
 pandas
+numpy
 SQLAlchemy
 PyMySQL
 python-dotenv
+streamlit
+plotly
