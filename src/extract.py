@@ -7,22 +7,69 @@ import requests
 from src.logging_config import logger
 
 
-# Configurações da API
+# =====================================================
+# CONFIGURAÇÕES DA API
+# =====================================================
+
 API_URL = "https://api.open-meteo.com/v1/forecast"
-
-LATITUDE = -23.5505
-LONGITUDE = -46.6333
-
-CIDADE = "São Paulo"
-ESTADO = "SP"
-
-FUSO_HORARIO = "America/Sao_Paulo"
 DIAS_PREVISAO = 7
 TIMEOUT = 30
 
 
-# Mapeamento entre as colunas do projeto e os campos da API
-# O campo "time" é retornado automaticamente pela API.
+# =====================================================
+# CIDADES MONITORADAS
+# =====================================================
+
+CIDADES = [
+    {
+        "cidade": "São Paulo",
+        "estado": "SP",
+        "latitude": -23.5505,
+        "longitude": -46.6333,
+        "timezone": "America/Sao_Paulo"
+    },
+    {
+        "cidade": "Rio de Janeiro",
+        "estado": "RJ",
+        "latitude": -22.9068,
+        "longitude": -43.1729,
+        "timezone": "America/Sao_Paulo"
+    },
+    {
+        "cidade": "Belo Horizonte",
+        "estado": "MG",
+        "latitude": -19.9167,
+        "longitude": -43.9345,
+        "timezone": "America/Sao_Paulo"
+    },
+    {
+        "cidade": "Brasília",
+        "estado": "DF",
+        "latitude": -15.7939,
+        "longitude": -47.8828,
+        "timezone": "America/Sao_Paulo"
+    },
+    {
+        "cidade": "Curitiba",
+        "estado": "PR",
+        "latitude": -25.4284,
+        "longitude": -49.2733,
+        "timezone": "America/Sao_Paulo"
+    },
+    {
+        "cidade": "Recife",
+        "estado": "PE",
+        "latitude": -8.0476,
+        "longitude": -34.8770,
+        "timezone": "America/Recife"
+    }
+]
+
+
+# =====================================================
+# MAPEAMENTO DAS COLUNAS
+# =====================================================
+
 MAPEAMENTO_COLUNAS = {
     "temperatura_max_c": "temperature_2m_max",
     "temperatura_min_c": "temperature_2m_min",
@@ -33,10 +80,14 @@ MAPEAMENTO_COLUNAS = {
 }
 
 
+# =====================================================
+# VALIDAÇÃO DA RESPOSTA DA API
+# =====================================================
+
 def validar_resposta_api(
     dados: Any
 ) -> Dict[str, Any]:
-    """Verifica se a resposta da API possui os dados esperados."""
+    """Verifica se a API retornou os campos esperados."""
 
     if not isinstance(dados, dict):
         raise ValueError(
@@ -91,20 +142,41 @@ def validar_resposta_api(
     return diario
 
 
-def buscar_dados_climaticos() -> Optional[pd.DataFrame]:
-    """Coleta dados meteorológicos da API Open-Meteo."""
+# =====================================================
+# EXTRAÇÃO DOS DADOS METEOROLÓGICOS
+# =====================================================
 
-    parametros = {
-        "latitude": LATITUDE,
-        "longitude": LONGITUDE,
-        "daily": list(MAPEAMENTO_COLUNAS.values()),
-        "timezone": FUSO_HORARIO,
-        "forecast_days": DIAS_PREVISAO
-    }
+def buscar_dados_climaticos(
+    localidade: Optional[Dict[str, Any]] = None
+) -> Optional[pd.DataFrame]:
+    """
+    Consulta as previsões meteorológicas de uma cidade.
+
+    Quando nenhuma localidade for informada,
+    utiliza São Paulo como padrão para manter
+    compatibilidade com o funcionamento anterior.
+    """
+
+    if localidade is None:
+        localidade = CIDADES[0]
 
     try:
+
+        cidade = localidade["cidade"]
+        estado = localidade["estado"]
+
+        parametros = {
+            "latitude": localidade["latitude"],
+            "longitude": localidade["longitude"],
+            "daily": list(MAPEAMENTO_COLUNAS.values()),
+            "timezone": localidade["timezone"],
+            "forecast_days": DIAS_PREVISAO
+        }
+
         logger.info(
-            "Iniciando coleta na API Open-Meteo."
+            "Iniciando coleta meteorológica: %s/%s.",
+            cidade,
+            estado
         )
 
         resposta = requests.get(
@@ -119,7 +191,6 @@ def buscar_dados_climaticos() -> Optional[pd.DataFrame]:
 
         diario = validar_resposta_api(dados)
 
-        # Organiza a data e as variáveis meteorológicas
         dados_organizados = {
             "data_referencia": diario["time"]
         }
@@ -129,14 +200,15 @@ def buscar_dados_climaticos() -> Optional[pd.DataFrame]:
 
         df = pd.DataFrame(dados_organizados)
 
-        # Adiciona informações de localização
-        df["cidade"] = CIDADE
-        df["estado"] = ESTADO
+        # Identifica a cidade de cada previsão
+        df["cidade"] = cidade
+        df["estado"] = estado
 
         logger.info(
-            "Coleta concluída: %d registros recebidos para %s.",
-            len(df),
-            CIDADE
+            "Coleta concluída: %s/%s | %d registros.",
+            cidade,
+            estado,
+            len(df)
         )
 
         return df
@@ -147,9 +219,10 @@ def buscar_dados_climaticos() -> Optional[pd.DataFrame]:
         )
 
     except requests.exceptions.HTTPError as erro:
+
         if erro.response is not None:
             logger.error(
-                "Erro HTTP %s na API Open-Meteo: %s",
+                "Erro HTTP %s na Open-Meteo: %s",
                 erro.response.status_code,
                 erro.response.text
             )

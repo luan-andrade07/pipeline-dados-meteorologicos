@@ -1,98 +1,344 @@
 
+"""Coordena a coleta, validação e persistência de múltiplas cidades."""
+
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+# =====================================================
+# CONFIGURAÇÃO INICIAL
+# =====================================================
 
-# Localiza a raiz do projeto e carrega as variáveis de ambiente
 ROOT_DIR = Path(__file__).resolve().parent
 
 load_dotenv(ROOT_DIR / ".env")
 
+# =====================================================
+# IMPORTAÇÕES DO PIPELINE
+# =====================================================
 
-# Importações dos módulos do projeto
-from src.extract import buscar_dados_climaticos
+from src.extract import (
+    CIDADES,
+    buscar_dados_climaticos
+)
+
 from src.transform import validar_tratar_dados
 from src.load import salvar_dados_mysql
 from src.logging_config import logger
 
+from src.monitoring import (
+    agora_utc,
+    iniciar_monitoramento,
+    finalizar_monitoramento
+)
+
+# =====================================================
+# EXECUÇÃO DO PIPELINE
+# =====================================================
 
 def executar_pipeline() -> bool:
     """
-    Coordena as etapas de extração, transformação e carregamento.
+    Executa o ETL para todas as cidades.
 
-    Returns:
-        True quando todas as etapas forem concluídas.
-        False quando ocorrer alguma falha.
+    Registra o desempenho de cada cidade e
+    o resultado geral do processamento.
     """
 
-    logger.info("========== INÍCIO DO PIPELINE ==========")
+    inicio = time.perf_counter()
+    inicio_utc = agora_utc()
 
-    try:
-        # 1. EXTRAÇÃO
-        logger.info("ETAPA 1/3: EXTRAÇÃO")
+    total_cidades = len(CIDADES)
+    cidades_sucesso = 0
+    registros_processados = 0
 
-        dados = buscar_dados_climaticos()
+    resultados_cidades = []
 
-        if dados is None:
-            logger.error(
-                "Pipeline interrompido: falha na extração."
-            )
-            return False
+    logger.info(
+        "========== INÍCIO DO PIPELINE =========="
+    )
 
-        logger.info("Extração finalizada com sucesso.")
+    logger.info(
+        "Total de cidades configuradas: %d",
+        total_cidades
+    )
 
-        # 2. TRANSFORMAÇÃO
-        logger.info("ETAPA 2/3: TRANSFORMAÇÃO")
+    # Uma falha no registro do monitoramento
+    # não deve impedir a execução do ETL.
+    execucao_id = iniciar_monitoramento(
+        total_cidades,
+        inicio_utc
+    )
 
-        dados_validos = validar_tratar_dados(dados)
+    # =================================================
+    # PROCESSAMENTO DAS CIDADES
+    # =================================================
 
-        if dados_validos is None:
-            logger.error(
-                "Pipeline interrompido: falha na transformação."
-            )
-            return False
+    for numero, localidade in enumerate(
+        CIDADES,
+        start=1
+    ):
 
-        if dados_validos.empty:
-            logger.error(
-                "Pipeline interrompido: nenhum dado válido."
-            )
-            return False
+        cidade = localidade["cidade"]
+        estado = localidade["estado"]
+
+        identificacao = f"{cidade}/{estado}"
+
+        inicio_cidade = time.perf_counter()
+
+        etapa = "EXTRACAO"
+        status_cidade = "FALHA"
+        mensagem = None
+        quantidade = 0
 
         logger.info(
-            "Transformação finalizada: %d registros válidos.",
-            len(dados_validos)
+            "========== CIDADE %d/%d: %s ==========",
+            numero,
+            total_cidades,
+            identificacao
         )
 
-        # 3. CARREGAMENTO
-        logger.info("ETAPA 3/3: CARREGAMENTO")
+        try:
 
-        sucesso = salvar_dados_mysql(dados_validos)
+            # =========================================
+            # ETAPA 1 - EXTRAÇÃO
+            # =========================================
 
-        if not sucesso:
-            logger.error(
-                "Pipeline interrompido: falha no carregamento."
+            logger.info("ETAPA 1/3: EXTRAÇÃO")
+
+            dados = buscar_dados_climaticos(
+                localidade
             )
-            return False
+
+            if dados is None or dados.empty:
+
+                mensagem = (
+                    "Nenhum dado recebido da API."
+                )
+
+                logger.error(
+                    "Falha na extração de %s.",
+                    identificacao
+                )
+
+                continue
+
+            logger.info(
+                "Extração concluída: %d registros.",
+                len(dados)
+            )
+
+            # =========================================
+            # ETAPA 2 - TRANSFORMAÇÃO
+            # =========================================
+
+            etapa = "TRANSFORMACAO"
+
+            logger.info(
+                "ETAPA 2/3: TRANSFORMAÇÃO"
+            )
+
+            dados_validos = validar_tratar_dados(
+                dados
+            )
+
+            if (
+                dados_validos is None
+                or dados_validos.empty
+            ):
+
+                mensagem = (
+                    "Nenhum registro válido após transformação."
+                )
+
+                logger.error(
+                    "Falha na transformação de %s.",
+                    identificacao
+                )
+
+                continue
+
+            logger.info(
+                "Transformação concluída: %d registros válidos.",
+                len(dados_validos)
+            )
+
+            # =========================================
+            # ETAPA 3 - CARREGAMENTO
+            # =========================================
+
+            etapa = "CARREGAMENTO"
+
+            logger.info(
+                "ETAPA 3/3: CARREGAMENTO"
+            )
+
+            if not salvar_dados_mysql(
+                dados_validos
+            ):
+
+                mensagem = (
+                    "Falha ao gravar dados no MySQL."
+                )
+
+                logger.error(
+                    "Falha no carregamento de %s.",
+                    identificacao
+                )
+
+                continue
+
+            # =========================================
+            # CIDADE PROCESSADA COM SUCESSO
+            # =========================================
+
+            quantidade = len(dados_validos)
+
+            registros_processados += quantidade
+            cidades_sucesso += 1
+
+            status_cidade = "SUCESSO"
+            etapa = None
+
+            logger.info(
+                "Cidade processada com sucesso: %s.",
+                identificacao
+            )
+
+        except Exception:
+
+            mensagem = (
+                "Erro inesperado; consulte logs/pipeline.log."
+            )
+
+            logger.exception(
+                "Erro inesperado ao processar %s.",
+                identificacao
+            )
+
+        finally:
+
+            # Registra o resultado independentemente
+            # de sucesso ou falha.
+            resultados_cidades.append({
+                "cidade": cidade,
+                "estado": estado,
+                "status": status_cidade,
+                "etapa_falha": (
+                    etapa
+                    if status_cidade == "FALHA"
+                    else None
+                ),
+                "mensagem": mensagem,
+                "registros_processados": quantidade,
+                "duracao_seg": round(
+                    time.perf_counter()
+                    - inicio_cidade,
+                    3
+                )
+            })
+
+    # =================================================
+    # RESUMO DA EXECUÇÃO
+    # =================================================
+
+    cidades_falha = (
+        total_cidades - cidades_sucesso
+    )
+
+    duracao_seg = (
+        time.perf_counter() - inicio
+    )
+
+    if cidades_falha == 0:
+        status = "SUCESSO"
+
+    elif cidades_sucesso > 0:
+        status = "PARCIAL"
+
+    else:
+        status = "FALHA"
+
+    logger.info(
+        "========== RESUMO DO PIPELINE =========="
+    )
+
+    logger.info(
+        "Cidades configuradas: %d",
+        total_cidades
+    )
+
+    logger.info(
+        "Cidades processadas: %d",
+        cidades_sucesso
+    )
+
+    logger.info(
+        "Registros gravados ou atualizados: %d",
+        registros_processados
+    )
+
+    logger.info(
+        "Cidades com falha: %d",
+        cidades_falha
+    )
+
+    logger.info(
+        "Duração total: %.2f segundos",
+        duracao_seg
+    )
+
+    # =================================================
+    # ARMAZENAMENTO DO MONITORAMENTO
+    # =================================================
+
+    finalizar_monitoramento(
+        execucao_id=execucao_id,
+        status=status,
+        duracao_seg=duracao_seg,
+        cidades_sucesso=cidades_sucesso,
+        cidades_falha=cidades_falha,
+        registros_processados=registros_processados,
+        resultados_cidades=resultados_cidades
+    )
+
+    # =================================================
+    # RESULTADO FINAL
+    # =================================================
+
+    if status == "SUCESSO":
 
         logger.info(
             "========== PIPELINE FINALIZADO COM SUCESSO =========="
         )
 
-        return True
+    else:
 
-    except Exception:
-        logger.exception(
-            "Erro inesperado durante a execução do pipeline."
+        logger.error(
+            "========== PIPELINE FINALIZADO COM FALHAS (%s) ==========",
+            status
         )
-        return False
 
+        falhas = [
+            f"{resultado['cidade']}/{resultado['estado']}"
+            for resultado in resultados_cidades
+            if resultado["status"] == "FALHA"
+        ]
+
+        logger.error(
+            "Cidades com falha: %s",
+            ", ".join(falhas)
+        )
+
+    return status == "SUCESSO"
+
+# =====================================================
+# INICIALIZAÇÃO
+# =====================================================
 
 if __name__ == "__main__":
 
-    sucesso = executar_pipeline()
-
-    # Código 0 = sucesso
-    # Código 1 = falha
-    sys.exit(0 if sucesso else 1)
+    sys.exit(
+        0 if executar_pipeline() else 1
+    )
