@@ -1,3 +1,4 @@
+
 requests
 pandas
 numpy
@@ -6,3 +7,4 @@ PyMySQL
 python-dotenv
 streamlit
 plotly
+pydeck
